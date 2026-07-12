@@ -9,6 +9,8 @@ public class RaftVRLoader : Mod
 
     public void Start()
     {
+        System.AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
+
         initializer = gameObject.AddComponent<ModInitializer>();
 
         ExtraSettingsAPI_Settings.initializerInstance = initializer;
@@ -19,6 +21,18 @@ public class RaftVRLoader : Mod
         }
 
         initializer.Init();
+    }
+
+    private System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, System.ResolveEventArgs args)
+    {
+        if (args.Name.Contains("AssetsTools.NET"))
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.FullName.Contains("AssetsTools.NET")) return asm;
+            }
+        }
+        return null;
     }
 
     public void OnModUnload()
