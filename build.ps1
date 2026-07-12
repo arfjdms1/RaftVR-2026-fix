@@ -1,5 +1,5 @@
 # RaftVR Mod Builder Script
-# This script compiles RaftVRMod, copies dependencies, compiles RaftVRLoader, and packages it into RaftVR.rmod.
+# This script compiles RaftVRMod, copies dependencies, compiles RaftVRLoader, and packages both RaftVR.rmod and RaftNonVR.rmod.
 # It can be run locally or in GitHub Actions.
 
 param(
@@ -47,48 +47,61 @@ if (-not (Test-Path $raftManaged)) {
     $raftManaged = Join-Path $RaftPath "Raft_Data/Managed"
 }
 
-# Resolve additional lib paths
+# Resolve additional lib paths as plain string paths (no PathInfo objects)
 $referencePaths = @()
+
 if (Test-Path $raftManaged) {
-    $referencePaths += $raftManaged
+    $referencePaths += [System.IO.Path]::GetFullPath($raftManaged)
     Write-Host "Raft Reference Path: $raftManaged" -ForegroundColor Cyan
 } else {
     Write-Warning "Raft Managed folder not found at: $raftManaged. If compiling in CI, ensure ReferencePath override contains these DLLs."
 }
 
 if (Test-Path $RMLPath) {
-    $referencePaths += $RMLPath
+    $referencePaths += [System.IO.Path]::GetFullPath($RMLPath)
     Write-Host "RML Reference Path: $RMLPath" -ForegroundColor Cyan
 } else {
     Write-Warning "RML binaries folder not found at: $RMLPath."
 }
 
-# Add local assemblies/libs to search paths
-$referencePaths += Resolve-Path "RaftVRLoader\RaftVRLoader\Assemblies" -ErrorAction SilentlyContinue
-$referencePaths += Resolve-Path "RaftVRMod\RaftVRMod\Patching\Assemblies" -ErrorAction SilentlyContinue
-$referencePaths += Resolve-Path "Libs" -ErrorAction SilentlyContinue
+# Add local assemblies/libs to search paths using full paths
+$referencePaths += [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "RaftVRLoader\RaftVRLoader\Assemblies"))
+$referencePaths += [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "RaftVRMod\RaftVRMod\Patching\Assemblies"))
+$referencePaths += [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "Libs"))
+
+# Unique resolved paths
+$resolvedPaths = @()
+foreach ($path in $referencePaths) {
+    if ($path) {
+        $normalized = $path.Trim().TrimEnd('\').TrimEnd('/')
+        if ($resolvedPaths -notcontains $normalized) {
+            $resolvedPaths += $normalized
+        }
+    }
+}
 
 # Join reference paths for MSBuild
-$refPathArg = [string]::Join(";", $referencePaths)
+$refPathArg = [string]::Join(";", $resolvedPaths)
+Write-Host "MSBuild ReferencePath Search Paths: $refPathArg" -ForegroundColor Cyan
 
 Write-Host "--- 1. Restoring NuGet Packages ---" -ForegroundColor Green
 # Restore NuGet packages
-& $msbuild "RaftVRMod\RaftVRMod.sln" /t:Restore /p:Configuration=$Configuration
-& $msbuild "RaftVRLoader\RaftVRLoader.sln" /t:Restore /p:Configuration=$Configuration
-& $msbuild "RaftNonVR\RaftNonVR.sln" /t:Restore /p:Configuration=$Configuration
+& $msbuild "RaftVRMod\RaftVRMod.sln" /t:Restore "/p:Configuration=$Configuration"
+& $msbuild "RaftVRLoader\RaftVRLoader.sln" /t:Restore "/p:Configuration=$Configuration"
+& $msbuild "RaftNonVR\RaftNonVR.sln" /t:Restore "/p:Configuration=$Configuration"
 
 Write-Host "--- 2. Building RaftVRMod ---" -ForegroundColor Green
-& $msbuild "RaftVRMod\RaftVRMod.sln" /p:Configuration=$Configuration /p:ReferencePath="$refPathArg"
+& $msbuild "RaftVRMod\RaftVRMod.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
 
 # Copy RaftVRMod.dll to RaftVRLoader assemblies
-$modDllSrc = "RaftVRMod\RaftVRMod\bin\$Configuration\RaftVRMod.dll"
+$modDllSrc = Join-Path $PSScriptRoot "RaftVRMod\RaftVRMod\bin\$Configuration\RaftVRMod.dll"
 # Fallback to obj if built there in some older configurations
 if (-not (Test-Path $modDllSrc)) {
-    $modDllSrc = "RaftVRMod\RaftVRMod\obj\$Configuration\RaftVRMod.dll"
+    $modDllSrc = Join-Path $PSScriptRoot "RaftVRMod\RaftVRMod\obj\$Configuration\RaftVRMod.dll"
 }
 
 if (Test-Path $modDllSrc) {
-    $loaderAssembliesDir = "RaftVRLoader\RaftVRLoader\Assemblies"
+    $loaderAssembliesDir = Join-Path $PSScriptRoot "RaftVRLoader\RaftVRLoader\Assemblies"
     if (-not (Test-Path $loaderAssembliesDir)) {
         New-Item -ItemType Directory -Force -Path $loaderAssembliesDir | Out-Null
     }
@@ -99,37 +112,35 @@ if (Test-Path $modDllSrc) {
 }
 
 Write-Host "--- 3. Building RaftVRLoader ---" -ForegroundColor Green
-& $msbuild "RaftVRLoader\RaftVRLoader.sln" /p:Configuration=$Configuration /p:ReferencePath="$refPathArg"
+& $msbuild "RaftVRLoader\RaftVRLoader.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
 
 Write-Host "--- 4. Building RaftNonVR ---" -ForegroundColor Green
-& $msbuild "RaftNonVR\RaftNonVR.sln" /p:Configuration=$Configuration /p:ReferencePath="$refPathArg"
+& $msbuild "RaftNonVR\RaftNonVR.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
 
 Write-Host "--- 5. Packaging RaftVR.rmod ---" -ForegroundColor Green
 # Create temporary packaging folder
-$buildDir = "build"
+$buildDir = Join-Path $PSScriptRoot "build_vr"
 if (Test-Path $buildDir) { Remove-Item $buildDir -Recurse -Force }
 New-Item -ItemType Directory -Path $buildDir | Out-Null
 
 # Copy files for .rmod structure (RaftVRLoader output, modinfo, assets, etc.)
-# We replicate the structure from build.bat
-# Note: we copy everything inside RaftVRLoader\RaftVRLoader except source files and build folders
-$loaderSrc = "RaftVRLoader\RaftVRLoader"
-Copy-Item (Join-Path $loaderSrc "modinfo.json") $buildDir -Force
-Copy-Item (Join-Path $loaderSrc "icon.png") $buildDir -Force -ErrorAction SilentlyContinue
-Copy-Item (Join-Path $loaderSrc "banner.jpg") $buildDir -Force -ErrorAction SilentlyContinue
-
-# Copy bin output DLL
-Copy-Item (Join-Path $loaderSrc "bin\RaftVR.dll") $buildDir -Force -ErrorAction SilentlyContinue
-
-# Copy Assemblies
-$buildAssemblies = Join-Path $buildDir "Assemblies"
-New-Item -ItemType Directory -Path $buildAssemblies | Out-Null
-Get-ChildItem (Join-Path $loaderSrc "Assemblies") -Filter *.dll | ForEach-Object {
-    Copy-Item $_.FullName $buildAssemblies -Force
+# Replicates robocopy /E /XF *.csproj *.rmod /XD bin obj
+$loaderSrc = Join-Path $PSScriptRoot "RaftVRLoader\RaftVRLoader"
+Get-ChildItem $loaderSrc -Recurse | ForEach-Object {
+    $relative = $_.FullName.Substring($loaderSrc.Length + 1)
+    if ($relative -like "bin*" -or $relative -like "obj*" -or $relative -like "*.csproj" -or $relative -like "*.rmod" -or $relative -like "*.sln") {
+        return
+    }
+    $dest = Join-Path $buildDir $relative
+    if ($_.PsIsContainer) {
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    } else {
+        Copy-Item $_.FullName $dest -Force
+    }
 }
 
 # Zip it up to RaftVR.rmod
-$rmodPath = "RaftVR.rmod"
+$rmodPath = Join-Path $PSScriptRoot "RaftVR.rmod"
 if (Test-Path $rmodPath) { Remove-Item $rmodPath -Force }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -137,5 +148,35 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # Clean up build dir
 Remove-Item $buildDir -Recurse -Force
+Write-Host "Packaging successful: RaftVR.rmod" -ForegroundColor Green
 
-Write-Host "Build complete! Packaging successful: RaftVR.rmod" -ForegroundColor Green
+Write-Host "--- 6. Packaging RaftNonVR.rmod ---" -ForegroundColor Green
+$buildNonVRDir = Join-Path $PSScriptRoot "build_nonvr"
+if (Test-Path $buildNonVRDir) { Remove-Item $buildNonVRDir -Recurse -Force }
+New-Item -ItemType Directory -Path $buildNonVRDir | Out-Null
+
+# Replicate robocopy /E /XF *.csproj *.rmod /XD bin obj
+$nonVRSrc = Join-Path $PSScriptRoot "RaftNonVR\RaftNonVR"
+Get-ChildItem $nonVRSrc -Recurse | ForEach-Object {
+    $relative = $_.FullName.Substring($nonVRSrc.Length + 1)
+    if ($relative -like "bin*" -or $relative -like "obj*" -or $relative -like "*.csproj" -or $relative -like "*.rmod" -or $relative -like "*.sln") {
+        return
+    }
+    $dest = Join-Path $buildNonVRDir $relative
+    if ($_.PsIsContainer) {
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    } else {
+        Copy-Item $_.FullName $dest -Force
+    }
+}
+
+# Zip it up to RaftNonVR.rmod
+$rmodNonVRPath = Join-Path $PSScriptRoot "RaftNonVR.rmod"
+if (Test-Path $rmodNonVRPath) { Remove-Item $rmodNonVRPath -Force }
+[System.IO.Compression.ZipFile]::CreateFromDirectory($buildNonVRDir, $rmodNonVRPath)
+
+# Clean up build dir
+Remove-Item $buildNonVRDir -Recurse -Force
+Write-Host "Packaging successful: RaftNonVR.rmod" -ForegroundColor Green
+
+Write-Host "Build complete! Output files: RaftVR.rmod, RaftNonVR.rmod" -ForegroundColor Green

@@ -51,17 +51,21 @@ jobs:
           # Since all reference assemblies from RML/Raft will be in Libs, we point the paths to Libs.
           .\build.ps1 -RaftPath "Libs" -RMLPath "Libs" -Configuration "Release"
 
-      - name: Upload Build Artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RaftVR-rmod
-          path: RaftVR.rmod
+          name: RaftVR-mods
+          path: |
+            RaftVR.rmod
+            RaftNonVR.rmod
           if-no-files-found: error
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: RaftVR.rmod
+          files: |
+            RaftVR.rmod
+            RaftNonVR.rmod
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
