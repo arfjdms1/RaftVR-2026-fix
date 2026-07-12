@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using RaftVR.Configs;
 using RaftVR.Utils;
 using System.Collections.Generic;
@@ -205,9 +205,29 @@ namespace RaftVR.HarmonyPatches
     class ThrowableComponentCoroutinePatch
     {
         // Thank you Fynikoto for helping me with transpiling this IEnumerator!
+        // Dynamic lookup: the compiler-generated suffix (d__NN) changes whenever
+        // methods are added/removed/reordered in the ThrowableComponent class,
+        // so we search for the nested type by its coroutine name prefix instead.
         static MethodBase TargetMethod()
         {
-            return typeof(ThrowableComponent).GetNestedType("<StartThrow>d__34", BindingFlags.NonPublic | BindingFlags.Instance).GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic);
+            System.Type[] nestedTypes = typeof(ThrowableComponent).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (System.Type nestedType in nestedTypes)
+            {
+                if (nestedType.Name.StartsWith("<StartThrow>"))
+                {
+                    MethodInfo moveNext = nestedType.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (moveNext != null)
+                    {
+                        UnityEngine.Debug.Log("[RaftVR] Found StartThrow coroutine: " + nestedType.Name);
+                        return moveNext;
+                    }
+                }
+            }
+
+            UnityEngine.Debug.LogWarning("[RaftVR] Could not find ThrowableComponent.<StartThrow> coroutine. " +
+                "The throw-direction patch will be skipped. A Raft update may have renamed it.");
+            return null;
         }
 
         [HarmonyTranspiler]

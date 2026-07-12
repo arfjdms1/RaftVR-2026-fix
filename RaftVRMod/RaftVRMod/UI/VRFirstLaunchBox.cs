@@ -1,4 +1,4 @@
-﻿using RaftVR.Configs;
+using RaftVR.Configs;
 using System;
 using UnityEngine;
 using UnityEngine.Events;
@@ -21,6 +21,7 @@ namespace RaftVR.UI
         internal static bool apiLoaded = false;
         internal static bool alreadyChoseSettings = false;
         internal static bool errored = false;
+        internal static bool incompatibleVersion = false;
 
         private void Awake()
         {
@@ -105,7 +106,18 @@ namespace RaftVR.UI
 
         internal void ShowErrorMessage()
         {
-            UpdateDialogSingleOption("A RaftVR error occured. Contact DrBibop on the RaftModding or Flat2VR Discord server.", "Okay", Button_Later);
+            if (incompatibleVersion)
+            {
+                UpdateDialogSingleOption(
+                    "RaftVR is incompatible with this version of Raft. " +
+                    "The game's Unity engine has been updated and the mod cannot safely patch it. " +
+                    "Please check for an updated version of RaftVR.",
+                    "Okay", Button_Later);
+            }
+            else
+            {
+                UpdateDialogSingleOption("A RaftVR error occured. Contact DrBibop on the RaftModding or Flat2VR Discord server.", "Okay", Button_Later);
+            }
         }
 
         internal void StartFirstTimeSetup()

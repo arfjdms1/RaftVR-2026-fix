@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using RaftVR.Inputs;
 using RaftVR.Configs;
 using RaftVR.Utils;
@@ -170,9 +170,29 @@ namespace RaftVR.HarmonyPatches
     class RespawnCoroutinePatch
     {
         // Thank you Fynikoto for helping me with transpiling this IEnumerator!
+        // Dynamic lookup: the compiler-generated suffix (d__NN) changes whenever
+        // methods are added/removed/reordered in the Player class, so we search
+        // for the nested type by its coroutine name prefix instead.
         static MethodBase TargetMethod()
         {
-            return typeof(Player).GetNestedType("<RespawnWait>d__40", BindingFlags.NonPublic | BindingFlags.Instance).GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic);
+            System.Type[] nestedTypes = typeof(Player).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (System.Type nestedType in nestedTypes)
+            {
+                if (nestedType.Name.StartsWith("<RespawnWait>"))
+                {
+                    MethodInfo moveNext = nestedType.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.NonPublic);
+                    if (moveNext != null)
+                    {
+                        Debug.Log("[RaftVR] Found RespawnWait coroutine: " + nestedType.Name);
+                        return moveNext;
+                    }
+                }
+            }
+
+            Debug.LogWarning("[RaftVR] Could not find Player.<RespawnWait> coroutine. " +
+                "The respawn-key patch will be skipped. A Raft update may have renamed it.");
+            return null;
         }
 
         [HarmonyTranspiler]

@@ -1,0 +1,67 @@
+name: Build RaftVR Mod
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Download Dependency Assemblies
+        shell: pwsh
+        run: |
+          # Create Libs directory
+          New-Item -ItemType Directory -Force -Path "Libs" | Out-Null
+          
+          # If the user has configured the REF_ASSEMBLIES_URL secret, download it.
+          # The archive should contain the game's assembly files (Assembly-CSharp.dll, etc.)
+          # and RaftModLoader binaries (coremod.dll, HMLCoreLibrary.dll).
+          if ("${{ secrets.REF_ASSEMBLIES_URL }}" -ne "") {
+              Write-Host "Downloading reference assemblies from secret URL..."
+              Invoke-WebRequest -Uri "${{ secrets.REF_ASSEMBLIES_URL }}" -OutFile "refs.zip"
+              Expand-Archive -Path "refs.zip" -DestinationPath "Libs" -Force
+              Write-Host "Reference assemblies extracted to Libs folder."
+          } else {
+              Write-Warning "REF_ASSEMBLIES_URL secret is not set. MSBuild might fail to find game/modloader DLLs unless they are already committed to the repository or present in the search paths."
+          }
+
+      - name: Build and Package Mod
+        shell: pwsh
+        run: |
+          # Run the build script
+          # Since all reference assemblies from RML/Raft will be in Libs, we point the paths to Libs.
+          .\build.ps1 -RaftPath "Libs" -RMLPath "Libs" -Configuration "Release"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RaftVR-rmod
+          path: RaftVR.rmod
+          if-no-files-found: error
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: RaftVR.rmod
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using RaftVR.Patching;
 using RaftVR.Rig;
 using RaftVR.Configs;
@@ -44,7 +44,15 @@ namespace RaftVR
 
             VRPatcher.PatchErrorCode result = VRPatcher.PatchVR();
 
-            if (result != VRPatcher.PatchErrorCode.Failed)
+            if (result == VRPatcher.PatchErrorCode.IncompatibleVersion)
+            {
+                // Version mismatch: the mod safely skipped patching.
+                // Show a specific dialog instead of the generic error.
+                VRFirstLaunchBox.errored = true;
+                VRFirstLaunchBox.incompatibleVersion = true;
+                OpenDialog();
+            }
+            else if (result != VRPatcher.PatchErrorCode.Failed)
             {
                 PostPatch(result);
             }
@@ -79,6 +87,12 @@ namespace RaftVR
                     Debug.Log("[RaftVR] VR has been patched in! Restart the game for the patch to take effect.");
                     OpenDialog();
                     break;
+                case VRPatcher.PatchErrorCode.IncompatibleVersion:
+                    Debug.LogError("[RaftVR] Incompatible version encountered during post-patch. The mod cannot be loaded.");
+                    VRFirstLaunchBox.errored = true;
+                    VRFirstLaunchBox.incompatibleVersion = true;
+                    OpenDialog();
+                    break;
                 default:
                     Debug.LogError("[RaftVR] Due to an error in the patching process, the mod cannot be loaded.");
                     break;
@@ -94,7 +108,20 @@ namespace RaftVR
                 Inputs.VRInput.Init(VRConfigs.Runtime);
 
                 harmonyInstance = new Harmony("com.DrBibop.RaftVR");
-                harmonyInstance.PatchAll(Assembly.GetExecutingAssembly());
+
+                try
+                {
+                    harmonyInstance.PatchAll(Assembly.GetExecutingAssembly());
+                }
+                catch (Exception patchEx)
+                {
+                    // Log which patches failed but don't abort entirely — some patches
+                    // may have succeeded and partial VR functionality is better than none.
+                    Debug.LogError("[RaftVR] One or more Harmony patches failed to apply. " +
+                        "Some VR features may not work correctly. This usually means Raft's " +
+                        "code has changed in an update.");
+                    Debug.LogException(patchEx);
+                }
 
                 StartCoroutine(EnableVR());
 

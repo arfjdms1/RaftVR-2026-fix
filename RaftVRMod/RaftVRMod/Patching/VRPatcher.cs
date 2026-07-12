@@ -1,9 +1,10 @@
-﻿using AssetsTools.NET;
+using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -11,6 +12,11 @@ namespace RaftVR.Patching
 {
     public static class VRPatcher
     {
+        // The CLDB bundled in Resources/cldb was generated for this Unity version family.
+        // If Raft upgrades its Unity engine, the CLDB will not match and patching
+        // must be skipped to avoid corrupting globalgamemanagers.
+        private const string EXPECTED_UNITY_VERSION_PREFIX = "2019.";
+
         private static string DataPath => Application.dataPath;
         private static string PluginsPath => Path.Combine(DataPath, "Plugins");
         private static string SteamVRPath => Path.Combine(DataPath, "StreamingAssets", "SteamVR");
@@ -18,6 +24,11 @@ namespace RaftVR.Patching
         public static PatchErrorCode PatchVR()
         {
             PatchErrorCode patchResult = PatchGGM(Path.Combine(DataPath, "globalgamemanagers"));
+
+            // If the Unity version is incompatible, stop immediately — don't
+            // copy VR plugins into a game install we can't safely patch.
+            if (patchResult == PatchErrorCode.IncompatibleVersion)
+                return PatchErrorCode.IncompatibleVersion;
 
             if (patchResult != PatchErrorCode.Failed)
             {
@@ -166,6 +177,41 @@ namespace RaftVR.Patching
             return flag;
         }
 
+        /// <summary>
+        /// Checks whether the Unity version string from the GGM file matches
+        /// the version family that our bundled CLDB was built for.
+        /// </summary>
+        private static bool IsCompatibleUnityVersion(string unityVersion)
+        {
+            if (string.IsNullOrEmpty(unityVersion))
+                return false;
+
+            return unityVersion.StartsWith(EXPECTED_UNITY_VERSION_PREFIX, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Reads just the Unity version string from the GGM header without loading
+        /// the full asset database. This is used for the pre-flight compatibility
+        /// check so we never attempt to deserialize with a mismatched CLDB.
+        /// </summary>
+        private static string ReadGGMUnityVersion(string path)
+        {
+            try
+            {
+                // AssetsTools.NET v2: load the file just to read the header version.
+                using (FileStream fs = File.OpenRead(path))
+                {
+                    AssetsFile tempFile = new AssetsFile(new AssetsFileReader(fs));
+                    return tempFile.typeTree?.unityVersion;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[RaftVR] Could not read Unity version from GGM header: " + e.Message);
+                return null;
+            }
+        }
+
         private static PatchErrorCode PatchGGM(string path)
         {
             if (XRSettings.supportedDevices.Length == 3)
@@ -174,8 +220,26 @@ namespace RaftVR.Patching
                 return PatchErrorCode.AlreadyPatched;
             }
 
+            // ── Pre-flight: version compatibility check ────────────────────
+            string detectedUnityVersion = ReadGGMUnityVersion(path);
+            Debug.Log("[RaftVR] Detected Unity version in GGM: " + (detectedUnityVersion ?? "<unknown>"));
+
+            if (!IsCompatibleUnityVersion(detectedUnityVersion))
+            {
+                Debug.LogError(
+                    "[RaftVR] INCOMPATIBLE UNITY VERSION DETECTED!\n" +
+                    "[RaftVR] Expected: " + EXPECTED_UNITY_VERSION_PREFIX + "x  |  Found: " + (detectedUnityVersion ?? "<unknown>") + "\n" +
+                    "[RaftVR] The bundled class database (CLDB) was built for Unity " + EXPECTED_UNITY_VERSION_PREFIX + "x.\n" +
+                    "[RaftVR] Patching with a mismatched CLDB would CORRUPT the globalgamemanagers file and\n" +
+                    "[RaftVR] prevent the game from launching. The GGM patch has been SKIPPED to protect your install.\n" +
+                    "[RaftVR] Please check for an updated version of RaftVR that supports Unity " + (detectedUnityVersion ?? "<unknown>") + ".");
+                return PatchErrorCode.IncompatibleVersion;
+            }
+
             Debug.Log("[RaftVR] Patching GGM...");
 
+            string backupPath = path + ".bak";
+            string tempPath = path + ".tmp";
             AssetsManager assetsManager = new AssetsManager();
 
             Debug.Log("[RaftVR] Loading GGM from path " + path);
@@ -244,17 +308,82 @@ namespace RaftVR.Patching
                                 {
                                     new AssetsReplacerFromMemory(0, (long)num, (int)assetInfo.curFileType, ushort.MaxValue, array)
                                 };
-                                using (MemoryStream memoryStream2 = new MemoryStream())
+
+                                // ── Atomic write: backup → temp → rename ──────────
+                                try
                                 {
-                                    using (AssetsFileWriter assetsFileWriter2 = new AssetsFileWriter(memoryStream2))
+                                    // Create backup of the original GGM before writing
+                                    File.Copy(path, backupPath, true);
+                                    Debug.Log("[RaftVR] Created backup at " + backupPath);
+
+                                    // Write to a temp file first, then rename
+                                    using (MemoryStream memoryStream2 = new MemoryStream())
                                     {
-                                        assetsFileInstance.file.Write(assetsFileWriter2, 0UL, list, 0U, null);
-                                        assetsFileInstance.stream.Close();
-                                        File.WriteAllBytes(path, memoryStream2.ToArray());
+                                        using (AssetsFileWriter assetsFileWriter2 = new AssetsFileWriter(memoryStream2))
+                                        {
+                                            assetsFileInstance.file.Write(assetsFileWriter2, 0UL, list, 0U, null);
+                                            assetsFileInstance.stream.Close();
+
+                                            byte[] patchedBytes = memoryStream2.ToArray();
+
+                                            // Sanity check: patched file should be roughly the same size
+                                            FileInfo originalInfo = new FileInfo(backupPath);
+                                            long sizeDiff = Math.Abs(patchedBytes.Length - originalInfo.Length);
+                                            if (sizeDiff > originalInfo.Length / 2)
+                                            {
+                                                Debug.LogError("[RaftVR] Patched GGM size differs drastically from original (" +
+                                                    patchedBytes.Length + " vs " + originalInfo.Length + " bytes). " +
+                                                    "Aborting write to prevent corruption.");
+                                                return PatchErrorCode.Failed;
+                                            }
+
+                                            File.WriteAllBytes(tempPath, patchedBytes);
+                                        }
                                     }
+
+                                    // Atomic-ish replace: delete original, rename temp
+                                    File.Delete(path);
+                                    File.Move(tempPath, path);
+
+                                    Debug.Log("[RaftVR] Successfully patched GGM!");
+                                    return PatchErrorCode.Success;
                                 }
-                                Debug.Log("[RaftVR] Successfully patched GGM!");
-                                return PatchErrorCode.Success;
+                                catch (Exception writeEx)
+                                {
+                                    Debug.LogError("[RaftVR] CRITICAL: Error writing patched GGM. Attempting to restore backup...");
+                                    Debug.LogException(writeEx);
+
+                                    // Clean up temp file if it exists
+                                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                                    // Restore backup if the original was deleted/corrupted
+                                    try
+                                    {
+                                        if (File.Exists(backupPath))
+                                        {
+                                            if (!File.Exists(path))
+                                            {
+                                                File.Copy(backupPath, path);
+                                                Debug.Log("[RaftVR] Successfully restored GGM from backup.");
+                                            }
+                                            else
+                                            {
+                                                Debug.Log("[RaftVR] Original GGM still exists; no restore needed.");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            Debug.LogError("[RaftVR] No backup file found! You may need to verify game files through Steam.");
+                                        }
+                                    }
+                                    catch (Exception restoreEx)
+                                    {
+                                        Debug.LogError("[RaftVR] CRITICAL: Failed to restore backup! Verify game files through Steam.");
+                                        Debug.LogException(restoreEx);
+                                    }
+
+                                    return PatchErrorCode.Failed;
+                                }
                             }
                         }
                     }
@@ -278,7 +407,12 @@ namespace RaftVR.Patching
         {
             Success,
             AlreadyPatched,
-            Failed
+            Failed,
+            /// <summary>
+            /// The game's Unity version does not match the bundled class database.
+            /// Patching was skipped to prevent data corruption.
+            /// </summary>
+            IncompatibleVersion
         }
     }
 }

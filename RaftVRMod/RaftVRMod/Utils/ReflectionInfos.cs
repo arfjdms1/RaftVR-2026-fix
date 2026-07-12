@@ -1,78 +1,107 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System.Reflection;
 using UltimateWater;
+using UnityEngine;
 
 namespace RaftVR.Utils
 {
     static class ReflectionInfos
     {
-        // Fields
-        internal static FieldInfo chargeMeterCurrentChargeField = AccessTools.Field(typeof(ChargeMeter), "currentCharge");
-        internal static FieldInfo chargeMeterMinChargeField = AccessTools.Field(typeof(ChargeMeter), "minCharge");
-        internal static FieldInfo chargeMeterMaxChargeField = AccessTools.Field(typeof(ChargeMeter), "maxCharge");
+        // ── Safe wrapper helpers ──────────────────────────────────────────
+        // These prevent NullReferenceException cascades in Harmony transpilers
+        // when Raft renames or removes private members in a game update.
 
-        internal static FieldInfo displayTextPriorityField = AccessTools.Field(typeof(DisplayText), "currentPriority");
-        internal static FieldInfo displayTextButtonTextField = AccessTools.Field(typeof(DisplayText), "buttonText");
+        private static FieldInfo SafeField(System.Type type, string name)
+        {
+            FieldInfo field = AccessTools.Field(type, name);
+            if (field == null)
+                Debug.LogWarning($"[RaftVR] Reflection target not found: {type.Name}.{name} (field). A Raft update may have renamed it.");
+            return field;
+        }
 
-        internal static FieldInfo throwableRotationField = AccessTools.Field(typeof(Throwable), "throwableStartRotation");
+        private static MethodInfo SafeMethod(System.Type type, string name)
+        {
+            MethodInfo method = AccessTools.Method(type, name);
+            if (method == null)
+                Debug.LogWarning($"[RaftVR] Reflection target not found: {type.Name}.{name} (method). A Raft update may have renamed it.");
+            return method;
+        }
 
-        internal static FieldInfo animationConnectionsField = AccessTools.Field(typeof(AnimationEventCaller), "connections");
+        private static MethodInfo SafePropertySetter(System.Type type, string name)
+        {
+            MethodInfo setter = AccessTools.PropertySetter(type, name);
+            if (setter == null)
+                Debug.LogWarning($"[RaftVR] Reflection target not found: {type.Name}.{name} (property setter). A Raft update may have renamed it.");
+            return setter;
+        }
 
-        internal static FieldInfo toolOnPressUseEventField = AccessTools.Field(typeof(UsableTool), "OnPressUseButton");
-        internal static FieldInfo toolOnReleaseUseEventField = AccessTools.Field(typeof(UsableTool), "OnReleaseUseButton");
-        internal static FieldInfo toolThisItemField = AccessTools.Field(typeof(UsableTool), "thisItem");
-        internal static FieldInfo toolSetAnimationField = AccessTools.Field(typeof(UsableTool), "setItemHitAnimation");
+        // ── Fields ────────────────────────────────────────────────────────
+        internal static FieldInfo chargeMeterCurrentChargeField = SafeField(typeof(ChargeMeter), "currentCharge");
+        internal static FieldInfo chargeMeterMinChargeField = SafeField(typeof(ChargeMeter), "minCharge");
+        internal static FieldInfo chargeMeterMaxChargeField = SafeField(typeof(ChargeMeter), "maxCharge");
 
-        internal static FieldInfo weaponDamageField = AccessTools.Field(typeof(MeleeWeapon), "damage");
-        internal static FieldInfo weaponGoThroughInvurnabilityField = AccessTools.Field(typeof(MeleeWeapon), "goThroughInvurnability");
+        internal static FieldInfo displayTextPriorityField = SafeField(typeof(DisplayText), "currentPriority");
+        internal static FieldInfo displayTextButtonTextField = SafeField(typeof(DisplayText), "buttonText");
 
-        internal static FieldInfo usableUseAnimationField = AccessTools.Field(typeof(ItemInstance_Usable), "animationOnUse");
+        internal static FieldInfo throwableRotationField = SafeField(typeof(Throwable), "throwableStartRotation");
 
-        internal static FieldInfo netPickupTargetField = AccessTools.Field(typeof(SweepNet), "currentPickupTarget");
-        internal static FieldInfo netSwingEventField = AccessTools.Field(typeof(SweepNet), "eventRef_netSwing");
+        internal static FieldInfo animationConnectionsField = SafeField(typeof(AnimationEventCaller), "connections");
 
-        internal static FieldInfo itemCanChannelField = AccessTools.Field(typeof(UseableItem), "canChannel");
+        internal static FieldInfo toolOnPressUseEventField = SafeField(typeof(UsableTool), "OnPressUseButton");
+        internal static FieldInfo toolOnReleaseUseEventField = SafeField(typeof(UsableTool), "OnReleaseUseButton");
+        internal static FieldInfo toolThisItemField = SafeField(typeof(UsableTool), "thisItem");
+        internal static FieldInfo toolSetAnimationField = SafeField(typeof(UsableTool), "setItemHitAnimation");
 
-        internal static FieldInfo shovelCurrentTargetField = AccessTools.Field(typeof(Shovel), "currentTarget");
+        internal static FieldInfo weaponDamageField = SafeField(typeof(MeleeWeapon), "damage");
+        internal static FieldInfo weaponGoThroughInvurnabilityField = SafeField(typeof(MeleeWeapon), "goThroughInvurnability");
 
-        internal static FieldInfo hookGatherTimerField = AccessTools.Field(typeof(Hook), "gatherTimer");
-        internal static FieldInfo hookGatherEmitterMethod = AccessTools.Field(typeof(Hook), "eventEmitter_gather");
+        internal static FieldInfo usableUseAnimationField = SafeField(typeof(ItemInstance_Usable), "animationOnUse");
 
-        internal static FieldInfo optionsMenuSettingsField = AccessTools.Field(typeof(OptionsMenuBox), "settings");
+        internal static FieldInfo netPickupTargetField = SafeField(typeof(SweepNet), "currentPickupTarget");
+        internal static FieldInfo netSwingEventField = SafeField(typeof(SweepNet), "eventRef_netSwing");
 
-        internal static FieldInfo personControllerNetworkPlayerField = AccessTools.Field(typeof(PersonController), "playerNetwork");
-        internal static FieldInfo personControllerCamTransformField = AccessTools.Field(typeof(PersonController), "camTransform");
+        internal static FieldInfo itemCanChannelField = SafeField(typeof(UseableItem), "canChannel");
 
-        internal static FieldInfo macheteQuestTagField = AccessTools.Field(typeof(Machete), "macheteInteractTagName");
+        internal static FieldInfo shovelCurrentTargetField = SafeField(typeof(Shovel), "currentTarget");
 
-        internal static FieldInfo storageInventoryRefField = AccessTools.Field(typeof(Storage_Small), "inventoryReference");
+        internal static FieldInfo hookGatherTimerField = SafeField(typeof(Hook), "gatherTimer");
+        internal static FieldInfo hookGatherEmitterMethod = SafeField(typeof(Hook), "eventEmitter_gather");
 
-        internal static FieldInfo characterModelPlayerNetworkField = AccessTools.Field(typeof(CharacterModelModifications), "playerNetwork");
+        internal static FieldInfo optionsMenuSettingsField = SafeField(typeof(OptionsMenuBox), "settings");
 
-        internal static FieldInfo throwableCanThrowField = AccessTools.Field(typeof(ThrowableComponent), "canThrow");
+        internal static FieldInfo personControllerNetworkPlayerField = SafeField(typeof(PersonController), "playerNetwork");
+        internal static FieldInfo personControllerCamTransformField = SafeField(typeof(PersonController), "camTransform");
 
-        internal static FieldInfo characterModelNetworkPlayerField = AccessTools.Field(typeof(CharacterModelModifications), "playerNetwork");
+        internal static FieldInfo macheteQuestTagField = SafeField(typeof(Machete), "macheteInteractTagName");
 
-        internal static FieldInfo equipmentModelNetworkPlayerField = AccessTools.Field(typeof(Equipment_Model), "playerNetwork");
+        internal static FieldInfo storageInventoryRefField = SafeField(typeof(Storage_Small), "inventoryReference");
 
-        // Methods
-        internal static MethodInfo usableItemUse = AccessTools.Method(typeof(UseItemController), "Use");
+        internal static FieldInfo characterModelPlayerNetworkField = SafeField(typeof(CharacterModelModifications), "playerNetwork");
 
-        internal static MethodInfo netAttemptCaptureMethod = AccessTools.Method(typeof(SweepNet), "AttemptCaptureWithNet");
-        internal static MethodInfo netPlayCatureSoundMethod = AccessTools.Method(typeof(SweepNet), "PlaySuccessfullCaptureSound");
+        internal static FieldInfo throwableCanThrowField = SafeField(typeof(ThrowableComponent), "canThrow");
 
-        internal static MethodInfo shovelResetMethod = AccessTools.Method(typeof(Shovel), "ResetItemChannel");
+        internal static FieldInfo characterModelNetworkPlayerField = SafeField(typeof(CharacterModelModifications), "playerNetwork");
 
-        internal static MethodInfo hookStartCollectingMethod = AccessTools.Method(typeof(Hook), "StartCollecting");
-        internal static MethodInfo hookStopCollectingMethod = AccessTools.Method(typeof(Hook), "StopCollecting");
-        internal static MethodInfo hookFinishGatheringMethod = AccessTools.Method(typeof(Hook), "FinishGathering");
+        internal static FieldInfo equipmentModelNetworkPlayerField = SafeField(typeof(Equipment_Model), "playerNetwork");
 
-        internal static MethodInfo macheteQuestInteract = AccessTools.Method(typeof(Machete), "MacheteInteractWithQuest");
+        // ── Methods ───────────────────────────────────────────────────────
+        internal static MethodInfo usableItemUse = SafeMethod(typeof(UseItemController), "Use");
 
-        internal static MethodInfo waterDistortionField = AccessTools.PropertySetter(typeof(WaterMaterials), "UnderwaterDistortionsIntensity");
+        internal static MethodInfo netAttemptCaptureMethod = SafeMethod(typeof(SweepNet), "AttemptCaptureWithNet");
+        internal static MethodInfo netPlayCatureSoundMethod = SafeMethod(typeof(SweepNet), "PlaySuccessfullCaptureSound");
 
-        internal static MethodInfo throwableReleaseHandMethod = AccessTools.Method(typeof(ThrowableComponent), "ReleaseHand");
+        internal static MethodInfo shovelResetMethod = SafeMethod(typeof(Shovel), "ResetItemChannel");
 
-        internal static MethodInfo ikSolverAnimatorSetMethod = AccessTools.PropertySetter(typeof(RootMotion.FinalIK.IKSolverVR), "animator");
+        internal static MethodInfo hookStartCollectingMethod = SafeMethod(typeof(Hook), "StartCollecting");
+        internal static MethodInfo hookStopCollectingMethod = SafeMethod(typeof(Hook), "StopCollecting");
+        internal static MethodInfo hookFinishGatheringMethod = SafeMethod(typeof(Hook), "FinishGathering");
+
+        internal static MethodInfo macheteQuestInteract = SafeMethod(typeof(Machete), "MacheteInteractWithQuest");
+
+        internal static MethodInfo waterDistortionField = SafePropertySetter(typeof(WaterMaterials), "UnderwaterDistortionsIntensity");
+
+        internal static MethodInfo throwableReleaseHandMethod = SafeMethod(typeof(ThrowableComponent), "ReleaseHand");
+
+        internal static MethodInfo ikSolverAnimatorSetMethod = SafePropertySetter(typeof(RootMotion.FinalIK.IKSolverVR), "animator");
     }
 }
