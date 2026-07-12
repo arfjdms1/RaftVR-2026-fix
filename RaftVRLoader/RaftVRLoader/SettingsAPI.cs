@@ -1,4 +1,4 @@
-﻿using RaftVR;
+using RaftVR;
 using RaftVR.Configs;
 using System.Globalization;
 
@@ -6,19 +6,22 @@ public class SettingsAPI
 {
     public bool ExtraSettingsAPI_Loaded = false;
 
-    private ModInitializer initializerInstance;
+    internal ModInitializer initializerInstance;
 
-    public SettingsAPI(ModInitializer initializerInstance)
+    public SettingsAPI()
     {
-        this.initializerInstance = initializerInstance;
-
         VRConfigs.OnCalibrateSettingsUpdated += UpdateCalibrationSettings;
         VRConfigs.OnFirstSetupDone += UpdateSetupSettings;
     }
 
     public void ExtraSettingsAPI_Load()
     {
-        initializerInstance.OnSettingsAPILoaded();
+        ExtraSettingsAPI_Loaded = true;
+        if (initializerInstance != null)
+        {
+            initializerInstance.OnSettingsAPILoaded();
+        }
+        
         RefreshSettings(false);
 
         string armScaleString = ExtraSettingsAPI_GetDataValue("hiddenSettings", "armScale");

@@ -1,9 +1,9 @@
-﻿using HMLLibrary;
+using HMLLibrary;
 using RaftVR;
 
 public class RaftVRLoader : Mod
 {
-    public static SettingsAPI ExtraSettingsAPI_Settings;
+    public static SettingsAPI ExtraSettingsAPI_Settings = new SettingsAPI();
 
     private ModInitializer initializer;
 
@@ -11,7 +11,12 @@ public class RaftVRLoader : Mod
     {
         initializer = gameObject.AddComponent<ModInitializer>();
 
-        ExtraSettingsAPI_Settings = new SettingsAPI(initializer);
+        ExtraSettingsAPI_Settings.initializerInstance = initializer;
+
+        if (ExtraSettingsAPI_Settings.ExtraSettingsAPI_Loaded)
+        {
+            initializer.OnSettingsAPILoaded();
+        }
 
         initializer.Init();
     }
