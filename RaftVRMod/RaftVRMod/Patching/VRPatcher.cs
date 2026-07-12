@@ -15,7 +15,7 @@ namespace RaftVR.Patching
         // The CLDB bundled in Resources/cldb was generated for this Unity version family.
         // If Raft upgrades its Unity engine, the CLDB will not match and patching
         // must be skipped to avoid corrupting globalgamemanagers.
-        private const string EXPECTED_UNITY_VERSION_PREFIX = "2019.";
+        private const string EXPECTED_UNITY_VERSION_PREFIX = "2021.";
 
         private static string DataPath => Application.dataPath;
         private static string PluginsPath => Path.Combine(DataPath, "Plugins");
@@ -247,7 +247,7 @@ namespace RaftVR.Patching
 
             using (MemoryStream cldbStream = new MemoryStream(Properties.Resources.cldb))
             {
-                assetsManager.LoadClassDatabase(cldbStream);
+                assetsManager.LoadClassPackage(cldbStream);
             }
 
             Debug.Log("[RaftVR] Starting patch...");

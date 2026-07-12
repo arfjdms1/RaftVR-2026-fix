@@ -58,7 +58,7 @@ namespace RaftVR.Utils
         internal static FieldInfo usableUseAnimationField = SafeField(typeof(ItemInstance_Usable), "animationOnUse");
 
         internal static FieldInfo netPickupTargetField = SafeField(typeof(SweepNet), "currentPickupTarget");
-        internal static FieldInfo netSwingEventField = SafeField(typeof(SweepNet), "eventRef_netSwing");
+        internal static FieldInfo netSwingEventField = SafeField(typeof(SweepNet), "er_swing");
 
         internal static FieldInfo itemCanChannelField = SafeField(typeof(UseableItem), "canChannel");
 
