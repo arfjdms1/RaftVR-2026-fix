@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -331,20 +331,26 @@
     <Reference Include="UnityEngine.XRModule.dll">
       <HintPath>F:\SteamLibrary\steamapps\common\Raft\Raft_Data/Managed\UnityEngine.XRModule.dll</HintPath>
     </Reference>
-    <Reference Include="0Harmony.dll">
-      <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\0Harmony.dll</HintPath>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\RaftVRMod\packages\Lib.Harmony.2.2.1\lib\net48\0Harmony.dll</HintPath>
     </Reference>
-    <Reference Include="coremod.dll">
-      <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\coremod.dll</HintPath>
+    <Reference Include="RaftModLoader_AssemblyLoader">
+      <HintPath>RaftModLoader_AssemblyLoader.dll</HintPath>
     </Reference>
-    <Reference Include="HMLCoreLibrary.dll">
-      <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\HMLCoreLibrary.dll</HintPath>
+    <Reference Include="FMODUnity">
+      <HintPath>FMODUnity.dll</HintPath>
     </Reference>
-    <Reference Include="Mono.Cecil.dll">
-      <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\Mono.Cecil.dll</HintPath>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>com.rlabrecque.steamworks.net.dll</HintPath>
     </Reference>
-    <Reference Include="RTCP.dll">
-      <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\RTCP.dll</HintPath>
+    <Reference Include="netstandard">
+      <HintPath>netstandard.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="RTCP">
+      <HintPath>RTCP.dll</HintPath>
     </Reference>
     <Reference Include="RTCPNetImprovements.dll">
       <HintPath>C:\Users\olipo\AppData\Roaming\RaftModLoader\binaries\RTCPNetImprovements.dll</HintPath>

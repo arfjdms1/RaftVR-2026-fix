@@ -131,9 +131,9 @@ namespace RaftVR
 
                 UIHelper.InitVRMenu();
 
-                Canvas rmlMenu = RaftModLoader.MainMenu.instance.GetComponent<Canvas>();
-                VRRig.instance.AddWorldCanvas(rmlMenu, Quaternion.identity);
-                UIHelper.AddPermanentCanvas(rmlMenu);
+                // Canvas rmlMenu = RaftModLoader.MainMenu.instance.GetComponent<Canvas>();
+                // VRRig.instance.AddWorldCanvas(rmlMenu, Quaternion.identity);
+                // UIHelper.AddPermanentCanvas(rmlMenu);
 
                 UIHelper.InitPermanentCanvases();
 

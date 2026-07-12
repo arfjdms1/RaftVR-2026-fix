@@ -1,4 +1,4 @@
-﻿using FMODUnity;
+using FMODUnity;
 using RaftVR.Utils;
 using UnityEngine;
 
@@ -62,7 +62,7 @@ namespace RaftVR.ItemComponents
                 StudioEventEmitter eventEmitter_gather = (StudioEventEmitter)ReflectionInfos.hookGatherEmitterMethod.GetValue(hook);
                 if (eventEmitter_gather != null)
                 {
-                    eventEmitter_gather.TriggerQue();
+                    eventEmitter_gather.Play();
                 }
 
                 return false;

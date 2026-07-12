@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using Steamworks;
 
 namespace RaftNonVR
@@ -17,7 +17,7 @@ namespace RaftNonVR
 
         [HarmonyPatch(typeof(Network_Player), "Deserialize")]
         [HarmonyPrefix]
-        static bool DeserializeVRIKMessages(Network_Player __instance, ref bool __result, Message_NetworkBehaviour msg, CSteamID remoteID)
+        static bool DeserializeVRIKMessages(Network_Player __instance, ref bool __result, Message_NetworkBehaviour msg, Network_UserId remoteID)
         {
             if (msg.Type == Network_VRIK.MSG_HEAD || msg.Type == Network_VRIK.MSG_LEFT_HAND || msg.Type == Network_VRIK.MSG_RIGHT_HAND)
             {

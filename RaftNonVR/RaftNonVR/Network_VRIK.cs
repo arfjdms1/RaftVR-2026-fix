@@ -33,7 +33,7 @@ namespace RaftNonVR
         private Vector3 origBowPos;
         private Quaternion origBowRot;
 
-        internal static bool DeserializeOnPlayer(Network_Player player, Message_NetworkBehaviour msg, CSteamID remoteID)
+        internal static bool DeserializeOnPlayer(Network_Player player, Message_NetworkBehaviour msg, Network_UserId remoteID)
         {
             if (playerDictionary.TryGetValue(player, out Network_VRIK vrik))
             {
@@ -123,7 +123,7 @@ namespace RaftNonVR
             rightHandIK.rotation = rightHandIK.rotation.SmoothDamp(rightHandTarget.rotation, ref der, 0.05f);
         }
 
-        public override bool Deserialize(Message_NetworkBehaviour msg, CSteamID remoteID)
+        public override bool Deserialize(Message_NetworkBehaviour msg, Network_UserId remoteID)
         {
             if (!(msg is Message_AxeHit message)) return false;
 

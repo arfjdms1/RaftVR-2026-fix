@@ -1,4 +1,4 @@
-﻿using RaftVR.Configs;
+using RaftVR.Configs;
 using RaftVR.Rig;
 using System.Collections.Generic;
 using System.Linq;
@@ -123,16 +123,20 @@ namespace RaftVR.UI
 
         private static void InitConsoleCanvas()
         {
+            /*
             consoleCanvas = HMLLibrary.HConsole.instance.transform.Find("RConsole").GetComponent<Canvas>();
 
             VRRig.instance.AddWorldCanvas(consoleCanvas, Quaternion.identity);
             AddPermanentCanvas(consoleCanvas);
+            */
         }
 
         internal static void SetConsoleActive(bool active)
         {
+            /*
             if (consoleCanvas.gameObject.activeSelf != active)
                 consoleCanvas.gameObject.SetActive(active);
+            */
         }
 
         internal static void MoveSettingsCanvasToFront()

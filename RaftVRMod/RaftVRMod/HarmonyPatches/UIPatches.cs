@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using RaftVR.UI;
 using RaftVR.Utils;
 using System;
@@ -82,6 +82,9 @@ namespace RaftVR.HarmonyPatches
             craftMenuRect.offsetMax = new Vector2(243, -154);
         }
 
+        // The legacy RaftModLoader.RConsole has been removed/refactored in the new RML version.
+        // These patches are commented out to allow the mod to compile under the new loader.
+        /*
         [HarmonyPatch(typeof(RaftModLoader.RConsole), "LateUpdate")]
         [HarmonyTranspiler]
         static IEnumerable<CodeInstruction> RConsole_PreventInputFieldActivation(IEnumerable<CodeInstruction> instructions)
@@ -104,5 +107,6 @@ namespace RaftVR.HarmonyPatches
         {
             UIHelper.SetConsoleActive(RaftModLoader.RConsole.isOpen);
         }
+        */
     }
 }

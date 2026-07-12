@@ -3,43 +3,62 @@
 # It can be run locally or in GitHub Actions.
 
 param(
-    [string]$RaftPath = "F:\SteamLibrary\steamapps\common\Raft",
-    [string]$RMLPath = "$env:APPDATA\RaftModLoader\binaries",
+    [string]$RaftPath = "C:\Program Files (x86)\Steam\steamapps\common\Raft",
+    [string]$RMLPath = "temp_libs",
     [string]$Configuration = "Release"
 )
 
 $ErrorActionPreference = "Stop"
 
-# Helper to find MSBuild
-function Find-MSBuild {
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path $vswhere) {
-        $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-        if ($vsPath) {
-            $msbuild = Join-Path $vsPath "MSBuild\Current\Bin\MSBuild.exe"
-            if (Test-Path $msbuild) { return $msbuild }
-        }
+# Helper to find MSBuild or dotnet
+$useDotnet = $false
+$msbuild = $null
+
+# 1. Try to find Visual Studio MSBuild
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $vswhere) {
+    $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+    if ($vsPath) {
+        $msbuild = Join-Path $vsPath "MSBuild\Current\Bin\MSBuild.exe"
+        if (-not (Test-Path $msbuild)) { $msbuild = $null }
     }
-    
-    # Fallback paths
-    $fallbacks = @(
+}
+
+if (-not $msbuild) {
+    # Try standard VS paths
+    $vsPaths = @(
         "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
         "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
         "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
-        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe",
-        "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
     )
-    foreach ($path in $fallbacks) {
-        if (Test-Path $path) { return $path }
+    foreach ($path in $vsPaths) {
+        if (Test-Path $path) {
+            $msbuild = $path
+            break
+        }
     }
-    return $null
 }
 
-$msbuild = Find-MSBuild
 if (-not $msbuild) {
-    Write-Error "Could not find MSBuild.exe on this system. Please make sure Visual Studio or Build Tools are installed."
+    # 2. Check if dotnet CLI is available (supports modern C# compiler)
+    if (Get-Command dotnet -ErrorAction SilentlyContinue) {
+        $useDotnet = $true
+        Write-Host "Using dotnet CLI build engine." -ForegroundColor Green
+    } else {
+        # 3. Final fallback to ancient .NET 4.0 MSBuild
+        $fallback = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+        if (Test-Path $fallback) {
+            $msbuild = $fallback
+            Write-Host "Using fallback .NET Framework MSBuild: $msbuild" -ForegroundColor Yellow
+            Write-Warning "Fallback MSBuild is very old and might not support modern C# syntax (expression-bodied members, string interpolation, etc.)."
+        } else {
+            Write-Error "Could not find MSBuild.exe or dotnet CLI on this system. Please make sure .NET SDK, Visual Studio, or Build Tools are installed."
+        }
+    }
+} else {
+    Write-Host "Using MSBuild: $msbuild" -ForegroundColor Green
 }
-Write-Host "Using MSBuild: $msbuild" -ForegroundColor Green
 
 # Prepare search paths for references
 $raftManaged = Join-Path $RaftPath "Raft_Data\Managed"
@@ -84,14 +103,68 @@ foreach ($path in $referencePaths) {
 $refPathArg = [string]::Join(";", $resolvedPaths)
 Write-Host "MSBuild ReferencePath Search Paths: $refPathArg" -ForegroundColor Cyan
 
+# Define build function
+function Run-Build {
+    param([string]$slnPath, [string]$target = "Build")
+    
+    $localNuget = Join-Path $PSScriptRoot "nuget.exe"
+    $refAssembliesDir = Join-Path $PSScriptRoot "packages\Microsoft.NETFramework.ReferenceAssemblies.net48.1.0.3\build\.NETFramework\v4.8"
+    
+    # Set ReferencePath as environment variable. MSBuild automatically imports
+    # environment variables as properties, avoiding command-line quoting bugs.
+    $env:ReferencePath = $refPathArg
+    
+    # If the local reference assemblies exist, set FrameworkPathOverride to tell MSBuild to use them.
+    if (Test-Path $refAssembliesDir) {
+        $env:FrameworkPathOverride = [System.IO.Path]::GetFullPath($refAssembliesDir)
+        Write-Host "FrameworkPathOverride set to: $env:FrameworkPathOverride" -ForegroundColor Cyan
+    }
+    
+    try {
+        if ($target -eq "Restore") {
+            # Make sure we have the net48 reference assemblies package downloaded
+            if (-not (Test-Path $refAssembliesDir)) {
+                if (Test-Path $localNuget) {
+                    Write-Host "Downloading net48 reference assemblies targeting pack..." -ForegroundColor Cyan
+                    & $localNuget install Microsoft.NETFramework.ReferenceAssemblies.net48 -Version 1.0.3 -OutputDirectory (Join-Path $PSScriptRoot "packages") | Out-Null
+                    if (Test-Path $refAssembliesDir) {
+                        $env:FrameworkPathOverride = [System.IO.Path]::GetFullPath($refAssembliesDir)
+                    }
+                }
+            }
+            
+            if (Test-Path $localNuget) {
+                & $localNuget restore $slnPath
+            } else {
+                if ($useDotnet) {
+                    & dotnet restore $slnPath
+                } else {
+                    & $msbuild $slnPath /t:Restore "/p:Configuration=$Configuration"
+                }
+            }
+        } else {
+            if ($useDotnet) {
+                & dotnet build $slnPath -c $Configuration "--no-restore"
+            } else {
+                & $msbuild $slnPath "/p:Configuration=$Configuration"
+            }
+        }
+    }
+    finally {
+        # Clear the environment variables
+        Remove-Item Env:\ReferencePath -ErrorAction SilentlyContinue
+        Remove-Item Env:\FrameworkPathOverride -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host "--- 1. Restoring NuGet Packages ---" -ForegroundColor Green
 # Restore NuGet packages
-& $msbuild "RaftVRMod\RaftVRMod.sln" /t:Restore "/p:Configuration=$Configuration"
-& $msbuild "RaftVRLoader\RaftVRLoader.sln" /t:Restore "/p:Configuration=$Configuration"
-& $msbuild "RaftNonVR\RaftNonVR.sln" /t:Restore "/p:Configuration=$Configuration"
+Run-Build "RaftVRMod\RaftVRMod.sln" "Restore"
+Run-Build "RaftVRLoader\RaftVRLoader.sln" "Restore"
+Run-Build "RaftNonVR\RaftNonVR.sln" "Restore"
 
 Write-Host "--- 2. Building RaftVRMod ---" -ForegroundColor Green
-& $msbuild "RaftVRMod\RaftVRMod.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
+Run-Build "RaftVRMod\RaftVRMod.sln"
 
 # Copy RaftVRMod.dll to RaftVRLoader assemblies
 $modDllSrc = Join-Path $PSScriptRoot "RaftVRMod\RaftVRMod\bin\$Configuration\RaftVRMod.dll"
@@ -112,10 +185,10 @@ if (Test-Path $modDllSrc) {
 }
 
 Write-Host "--- 3. Building RaftVRLoader ---" -ForegroundColor Green
-& $msbuild "RaftVRLoader\RaftVRLoader.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
+Run-Build "RaftVRLoader\RaftVRLoader.sln"
 
 Write-Host "--- 4. Building RaftNonVR ---" -ForegroundColor Green
-& $msbuild "RaftNonVR\RaftNonVR.sln" "/p:Configuration=$Configuration" "/p:ReferencePath=`"$refPathArg`""
+Run-Build "RaftNonVR\RaftNonVR.sln"
 
 Write-Host "--- 5. Packaging RaftVR.rmod ---" -ForegroundColor Green
 # Create temporary packaging folder
@@ -124,7 +197,6 @@ if (Test-Path $buildDir) { Remove-Item $buildDir -Recurse -Force }
 New-Item -ItemType Directory -Path $buildDir | Out-Null
 
 # Copy files for .rmod structure (RaftVRLoader output, modinfo, assets, etc.)
-# Replicates robocopy /E /XF *.csproj *.rmod /XD bin obj
 $loaderSrc = Join-Path $PSScriptRoot "RaftVRLoader\RaftVRLoader"
 Get-ChildItem $loaderSrc -Recurse | ForEach-Object {
     $relative = $_.FullName.Substring($loaderSrc.Length + 1)
