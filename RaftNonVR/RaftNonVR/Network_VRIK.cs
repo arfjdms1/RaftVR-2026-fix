@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using RootMotion.FinalIK;
 using Steamworks;
 using System.Collections.Generic;
@@ -238,7 +238,16 @@ namespace RaftNonVR
             references.rightToes = bones[21];
 
             vrik.solver.SetToReferences(references);
-            AccessTools.PropertySetter(typeof(IKSolverVR), "animator").Invoke(vrik.solver, new object[] { playerNetwork.Animator.anim });
+            
+            var animatorSetter = AccessTools.PropertySetter(typeof(IKSolverVR), "animator");
+            if (animatorSetter != null)
+            {
+                animatorSetter.Invoke(vrik.solver, new object[] { playerNetwork.Animator.anim });
+            }
+            else
+            {
+                Debug.LogWarning("[RaftVR] Property setter for IKSolverVR.animator not found. Synced animations may be degraded.");
+            }
 
             vrik.solver.leftArm.target = leftHandIK;
             vrik.solver.leftArm.armLengthMlp = armScale;
@@ -367,7 +376,14 @@ namespace RaftNonVR
                     if (throwable)
                     {
                         FieldInfo throwableRotation = AccessTools.Field(typeof(Throwable), "throwableStartRotation");
-                        throwableRotation.SetValue(throwable, (Vector3)throwableRotation.GetValue(throwable) + new Vector3(10, 0, 0));
+                        if (throwableRotation != null)
+                        {
+                            throwableRotation.SetValue(throwable, (Vector3)throwableRotation.GetValue(throwable) + new Vector3(10, 0, 0));
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[RaftVR] Field Throwable.throwableStartRotation not found. Throwable start rotation adjustment skipped.");
+                        }
                     }
                 }
             }
